@@ -48,9 +48,9 @@
 
 <script>
 const STUDENTS_JSON = "students.json";
-const CHUNK = 50;
+const CHUNK = 50; // students per load
 const GS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzyrWqu9_HSBcOb0klZ4jGPvpEmpplEm0dhPauwYWkW-MXgd4aCGp4bvauQDq3eM0tt/exec";
-const WRITE_TOKEN = "";
+const WRITE_TOKEN = ""; // optional token if set in Apps Script
 
 let students = [];
 let rendered = 0;
@@ -60,21 +60,15 @@ async function init() {
   const resp = await fetch(STUDENTS_JSON);
   students = await resp.json();
 
-  // populate year/sem options
+  // populate year/sem filters
   const years = Array.from(new Set(students.map(s=>s.year))).sort();
   const sems = Array.from(new Set(students.map(s=>s.sem))).sort();
-  const ysel = document.getElementById('yearFilter');
-  years.forEach(y=>ysel.insertAdjacentHTML('beforeend', `<option value="${y}">${y}</option>`));
-  const ssel = document.getElementById('semFilter');
-  sems.forEach(s=>ssel.insertAdjacentHTML('beforeend', `<option value="${s}">${s}</option>`));
+  years.forEach(y=>document.getElementById('yearFilter').insertAdjacentHTML('beforeend', `<option value="${y}">${y}</option>`));
+  sems.forEach(s=>document.getElementById('semFilter').insertAdjacentHTML('beforeend', `<option value="${s}">${s}</option>`));
 
-  // initial render chunk
   renderChunk();
-
-  // fetch initial global counts for visible chunk and beyond
   fetchCountsForAll();
 
-  // event handlers
   document.getElementById('filterMode').addEventListener('change', applyFilters);
   document.getElementById('yearFilter').addEventListener('change', applyFilters);
   document.getElementById('semFilter').addEventListener('change', applyFilters);
@@ -87,10 +81,7 @@ async function init() {
 }
 
 function createCard(s) {
-  const likeId = `like-count-${s.id}`;
-  const disId = `dis-count-${s.id}`;
-
-  const html = `
+  return `
   <div class="card" data-id="${s.id}" data-year="${s.year}" data-sem="${s.sem}">
     <img class="photo" loading="lazy" src="${s.photo || ''}" alt="photo">
     <div class="signature"><img src="${s.signature || ''}" alt="sig" style="height:44px;object-fit:contain"></div>
@@ -98,13 +89,12 @@ function createCard(s) {
       <div><span class="badge">Year</span> ${s.year} &nbsp; <span class="badge">Sem</span> ${s.sem}</div>
       <div style="margin-top:8px" class="likebar">
         <button class="icon" onclick="sendLike('${s.id}',1)">👍</button>
-        <div id="${likeId}">0</div>
+        <div id="like-count-${s.id}">0</div>
         <button class="icon" onclick="sendLike('${s.id}',-1)">👎</button>
-        <div id="${disId}">0</div>
+        <div id="dis-count-${s.id}">0</div>
       </div>
     </div>
   </div>`;
-  return html;
 }
 
 function renderChunk() {
@@ -131,17 +121,15 @@ async function fetchCountsForAll() {
       const res = await fetch(GS_WEBAPP_URL + '?action=getCounts', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ids: sub})
+        body: JSON.stringify({ action: 'getCounts', ids: sub })
       });
       if (!res.ok) continue;
       const j = await res.json();
       if (j.counts) {
         Object.assign(counts, j.counts);
         sub.forEach(id => {
-          const likeDom = document.getElementById(`like-count-${id}`);
-          const disDom = document.getElementById(`dis-count-${id}`);
-          if (likeDom) likeDom.innerText = j.counts[id]?.likes ?? 0;
-          if (disDom) disDom.innerText = j.counts[id]?.dislikes ?? 0;
+          document.getElementById(`like-count-${id}`)?.innerText = j.counts[id]?.likes ?? 0;
+          document.getElementById(`dis-count-${id}`)?.innerText = j.counts[id]?.dislikes ?? 0;
         });
       }
     } catch(e){ console.warn('count fetch err', e); }
@@ -161,7 +149,7 @@ async function sendLike(id, delta) {
     const res = await fetch(GS_WEBAPP_URL + '?action=updateCount', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ id: id, type: delta===1?'like':'dislike', token: WRITE_TOKEN })
+      body: JSON.stringify({ action: 'updateCount', id: id, type: delta===1?'like':'dislike', token: WRITE_TOKEN })
     });
     if (!res.ok) return;
     const j = await res.json();
@@ -190,7 +178,6 @@ function applyFilters() {
   const container = document.getElementById('container');
   container.innerHTML = '';
   rendered = 0;
-  // keep filtered as the student list to render (so renderChunk works)
   students = filtered.concat(students.filter(s=>!filtered.includes(s)));
   renderChunk();
   fetchCountsForAll();
@@ -200,4 +187,3 @@ init();
 </script>
 </body>
 </html>
-
